@@ -11,6 +11,7 @@ export default function CreateTransferModal({ isOpen, onClose, onSuccess }) {
     const [fromLocationId, setFromLocationId] = useState('')
     const [toLocationId, setToLocationId] = useState('')
     const [quantity, setQuantity] = useState('')
+    const [autoReceive, setAutoReceive] = useState(false)
 
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
@@ -86,19 +87,67 @@ export default function CreateTransferModal({ isOpen, onClose, onSuccess }) {
 
             if (invError) throw invError
 
-            // 2. Create Transaction (TRANSFER_OUT) with status PENDING
-            const { error: txError } = await supabase
-                .from('transactions')
-                .insert({
-                    type: 'TRANSFER_OUT',
-                    product_id: selectedProduct.id,
-                    from_location_id: fromLocationId,
-                    to_location_id: toLocationId,
-                    quantity: parseInt(quantity),
-                    status: 'PENDING'
-                })
+            // 2. Handle Transaction & Destination Stock based on Auto Receive
+            if (autoReceive) {
+                // A. Increment Destination Inventory
+                const { data: destInv } = await supabase
+                    .from('inventory')
+                    .select('quantity')
+                    .match({ product_id: selectedProduct.id, location_id: toLocationId })
+                    .single()
 
-            if (txError) throw txError
+                const currentDestQty = destInv?.quantity || 0
+
+                const { error: destError } = await supabase
+                    .from('inventory')
+                    .upsert({
+                        product_id: selectedProduct.id,
+                        location_id: toLocationId,
+                        quantity: currentDestQty + parseInt(quantity)
+                    })
+
+                if (destError) throw destError
+
+                // B. Create COMPLETED Transactions (OUT and IN)
+                const { error: txOutError } = await supabase
+                    .from('transactions')
+                    .insert({
+                        type: 'TRANSFER_OUT',
+                        product_id: selectedProduct.id,
+                        from_location_id: fromLocationId,
+                        to_location_id: toLocationId,
+                        quantity: parseInt(quantity),
+                        status: 'COMPLETED'
+                    })
+                if (txOutError) throw txOutError
+
+                const { error: txInError } = await supabase
+                    .from('transactions')
+                    .insert({
+                        type: 'TRANSFER_IN',
+                        product_id: selectedProduct.id,
+                        from_location_id: fromLocationId,
+                        to_location_id: toLocationId,
+                        quantity: parseInt(quantity),
+                        status: 'COMPLETED'
+                    })
+                if (txInError) throw txInError
+
+            } else {
+                // Standard Flow: Create PENDING Transaction
+                const { error: txError } = await supabase
+                    .from('transactions')
+                    .insert({
+                        type: 'TRANSFER_OUT',
+                        product_id: selectedProduct.id,
+                        from_location_id: fromLocationId,
+                        to_location_id: toLocationId,
+                        quantity: parseInt(quantity),
+                        status: 'PENDING'
+                    })
+
+                if (txError) throw txError
+            }
 
             onSuccess()
             onClose()
@@ -205,6 +254,17 @@ export default function CreateTransferModal({ isOpen, onClose, onSuccess }) {
                             value={quantity}
                             onChange={(e) => setQuantity(e.target.value)}
                         />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            id="autoReceive"
+                            checked={autoReceive}
+                            onChange={(e) => setAutoReceive(e.target.checked)}
+                            className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                        <label htmlFor="autoReceive" className="text-sm font-medium text-slate-700">Auto Receive at Destination</label>
                     </div>
 
                     <div className="flex justify-end pt-4">

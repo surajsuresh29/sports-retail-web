@@ -73,7 +73,7 @@ export default function ProductSearch({ onSelectLineItem }) {
             {isFocused && results.length > 0 && (
                 <div className="absolute mt-2 w-full bg-white/90 backdrop-blur-xl shadow-2xl max-h-[60vh] rounded-2xl py-2 ring-1 ring-slate-200 overflow-hidden sm:text-sm z-50 animate-in fade-in zoom-in-95 duration-200">
                     <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 border-b border-slate-100">
-                        Search Results
+                        Found Products
                     </div>
                     {results.map((product) => (
                         <div

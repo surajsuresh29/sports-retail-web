@@ -181,7 +181,17 @@ export default function AddProductModal({ isOpen, onClose, onProductAdded, produ
 
                         <div>
                             <label className="block text-sm font-medium text-slate-700">Category</label>
-                            <input type="text" name="category" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2" value={formData.category} onChange={handleChange} />
+                            <select
+                                name="category"
+                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2"
+                                value={formData.category}
+                                onChange={handleChange}
+                            >
+                                <option value="">Select Category</option>
+                                {['Cricket', 'Football', 'Badminton', 'Tennis', 'Swimming', 'Fitness', 'Apparel', 'Footwear', 'Accessories', 'Others'].map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                            </select>
                         </div>
 
                         <div className="md:col-span-2">

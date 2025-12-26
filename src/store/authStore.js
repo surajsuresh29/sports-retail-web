@@ -22,6 +22,8 @@ export const useAuthStore = create((set) => ({
             }
         } catch (e) {
             console.error('Error fetching profile:', e)
+        } finally {
+            set({ loading: false })
         }
     },
 

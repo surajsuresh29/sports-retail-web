@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useAuthStore } from '../store/authStore'
-import { DollarSign, AlertTriangle, Activity, Package } from 'lucide-react'
+import { IndianRupee, AlertTriangle, Activity, Package } from 'lucide-react'
 
 export default function Dashboard() {
     const { user, profile } = useAuthStore()
@@ -29,6 +29,8 @@ export default function Dashboard() {
     const [pendingTransfersList, setPendingTransfersList] = useState([])
 
     const [allLocations, setAllLocations] = useState([])
+    const [allProducts, setAllProducts] = useState([])
+    const [selectedLocation, setSelectedLocation] = useState(null)
 
     useEffect(() => {
         fetchDashboardData()
@@ -61,6 +63,8 @@ export default function Dashboard() {
             const { data: productsData } = await supabase
                 .from('products')
                 .select('*, inventory(quantity, location_id)')
+
+            if (productsData) setAllProducts(productsData)
 
             let lowStockCount = 0
             if (productsData && warehouse) {
@@ -96,6 +100,8 @@ export default function Dashboard() {
                 .select('*, product:products(name), from_location:from_location_id(name), to_location:to_location_id(name)')
                 .order('created_at', { ascending: false })
                 .limit(5)
+
+            if (recents) setRecentTx(recents)
 
             // 5. Location Stats (Aggregated Stock)
             const { data: locations } = await supabase.from('locations').select('*').order('id')
@@ -153,7 +159,7 @@ export default function Dashboard() {
                     title="Total Sales Today"
                     value={`₹${stats.salesToday.toLocaleString()}`}
                     sub={`${stats.salesCountToday} transactions`}
-                    icon={DollarSign}
+                    icon={IndianRupee}
                     color="text-green-600 bg-green-600"
                     onClick={() => setIsSalesModalOpen(true)}
                 />
@@ -187,7 +193,11 @@ export default function Dashboard() {
                 <h2 className="text-xl font-bold text-slate-800 mb-4">Live Inventory by Location</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     {locationStats.map(loc => (
-                        <div key={loc.id} className={`p-6 rounded-xl border ${loc.type === 'WAREHOUSE' ? 'bg-slate-800 text-white border-slate-700' : 'bg-white text-slate-800 border-slate-200 shadow-sm'}`}>
+                        <div
+                            key={loc.id}
+                            onClick={() => setSelectedLocation(loc)}
+                            className={`p-6 rounded-xl border cursor-pointer hover:shadow-md transition-shadow ${loc.type === 'WAREHOUSE' ? 'bg-slate-800 text-white border-slate-700' : 'bg-white text-slate-800 border-slate-200 shadow-sm'}`}
+                        >
                             <div className="flex justify-between items-start mb-2">
                                 <div>
                                     <h3 className="font-bold text-lg">{loc.name}</h3>
@@ -236,6 +246,13 @@ export default function Dashboard() {
                                     <td className="px-6 py-3 text-right font-bold">{tx.quantity}</td>
                                 </tr>
                             ))}
+                            {recentTx.length === 0 && (
+                                <tr>
+                                    <td colSpan="4" className="p-8 text-center text-slate-500">
+                                        No recent activity to show.
+                                    </td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>
@@ -323,7 +340,7 @@ export default function Dashboard() {
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
                         <div className="p-6 border-b border-slate-200 flex justify-between items-center">
                             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                                <DollarSign className="text-green-600" />
+                                <IndianRupee className="text-green-600" />
                                 Today's Sales Details
                             </h2>
                             <button onClick={() => setIsSalesModalOpen(false)} className="text-slate-400 hover:text-slate-600">✕</button>
@@ -402,6 +419,53 @@ export default function Dashboard() {
                         </div>
                         <div className="p-4 border-t border-slate-200 bg-slate-50 text-right">
                             <button onClick={() => setIsTransfersModalOpen(false)} className="px-4 py-2 bg-slate-800 text-white rounded hover:bg-slate-700">Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Location Inventory Modal */}
+            {selectedLocation && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="p-6 border-b border-slate-200 flex justify-between items-center">
+                            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                <Package className="text-blue-600" />
+                                Inventory: {selectedLocation.name}
+                            </h2>
+                            <button onClick={() => setSelectedLocation(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+                        </div>
+                        <div className="p-0 overflow-auto flex-1">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-slate-50 text-slate-700 font-bold sticky top-0">
+                                    <tr>
+                                        <th className="px-6 py-4 border-b">Product</th>
+                                        <th className="px-6 py-4 border-b">SKU</th>
+                                        <th className="px-6 py-4 border-b text-center">In Stock</th>
+                                        <th className="px-6 py-4 border-b text-right">Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {allProducts
+                                        .filter(p => p.inventory.some(i => i.location_id === selectedLocation.id && i.quantity > 0))
+                                        .map(p => {
+                                            const stock = p.inventory.find(i => i.location_id === selectedLocation.id)?.quantity || 0
+                                            return (
+                                                <tr key={p.id} className="hover:bg-slate-50">
+                                                    <td className="px-6 py-3 font-medium text-slate-900">{p.name}</td>
+                                                    <td className="px-6 py-3 text-slate-500">{p.sku}</td>
+                                                    <td className="px-6 py-3 text-center font-bold">{stock}</td>
+                                                    <td className="px-6 py-3 text-right text-slate-700">₹{(stock * p.price).toFixed(2)}</td>
+                                                </tr>
+                                            )
+                                        })}
+                                    {allProducts.filter(p => p.inventory.some(i => i.location_id === selectedLocation.id && i.quantity > 0)).length === 0 && (
+                                        <tr><td colSpan="4" className="p-8 text-center text-slate-500">No stock available at this location.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="p-4 border-t border-slate-200 bg-slate-50 text-right">
+                            <button onClick={() => setSelectedLocation(null)} className="px-4 py-2 bg-slate-800 text-white rounded hover:bg-slate-700">Close</button>
                         </div>
                     </div>
                 </div>

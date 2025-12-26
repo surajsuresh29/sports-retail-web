@@ -8,8 +8,22 @@ import Dashboard from './pages/Dashboard'
 import Inventory from './pages/Inventory'
 import Transfers from './pages/Transfers'
 import POS from './pages/POS'
+import Team from './pages/Team'
 import SalesHistory from './pages/SalesHistory'
 import { ToastContainer } from './components/ui/ToastContainer'
+
+const ProtectedRoute = ({ children, allowedRoles }) => {
+  const { user, profile, loading } = useAuthStore()
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-400">Loading...</div>
+  if (!user) return <Navigate to="/login" />
+
+  if (allowedRoles && profile && !allowedRoles.includes(profile.role)) {
+    return <Navigate to="/pos" replace />
+  }
+
+  return children
+}
 
 function App() {
   const { setUser, fetchProfile, setLoading, user } = useAuthStore()
@@ -38,11 +52,36 @@ function App() {
         <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
 
         <Route element={<Layout />}>
-          <Route path="/" element={user ? <Dashboard /> : <Navigate to="/login" />} />
-          <Route path="/inventory" element={user ? <Inventory /> : <Navigate to="/login" />} />
-          <Route path="/transfers" element={user ? <Transfers /> : <Navigate to="/login" />} />
-          <Route path="/pos" element={user ? <POS /> : <Navigate to="/login" />} />
-          <Route path="/sales" element={user ? <SalesHistory /> : <Navigate to="/login" />} />
+          <Route path="/" element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'MANAGER']}>
+              <Dashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/inventory" element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'MANAGER']}>
+              <Inventory />
+            </ProtectedRoute>
+          } />
+          <Route path="/transfers" element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'MANAGER']}>
+              <Transfers />
+            </ProtectedRoute>
+          } />
+          <Route path="/pos" element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'MANAGER', 'CASHIER']}>
+              <POS />
+            </ProtectedRoute>
+          } />
+          <Route path="/sales" element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'MANAGER', 'CASHIER']}>
+              <SalesHistory />
+            </ProtectedRoute>
+          } />
+          <Route path="/team" element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <Team />
+            </ProtectedRoute>
+          } />
         </Route>
       </Routes>
       <ToastContainer />

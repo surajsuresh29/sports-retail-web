@@ -7,10 +7,10 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: "#2563eb", // Blue-600
+        primary: "#f59e0b", // Amber-500
         brand: "#fede00", // Yellow
         secondary: "#475569", // Slate-600
-        accent: "#f59e0b", // Amber-500
+        accent: "#1e293b", // Slate-800 (Dark Accent for contrast against yellow)
         danger: "#ef4444", // Red-500
         success: "#22c55e", // Green-500
       },

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabaseClient'
 import { useAuthStore } from '../store/authStore'
-import { Search, Printer, Eye, Filter } from 'lucide-react'
+import { Search, Printer, Eye, Filter, Calendar } from 'lucide-react'
 import { InvoiceDisplay } from '../components/POS/InvoiceDisplay'
 
 export default function SalesHistory() {
@@ -17,10 +17,18 @@ export default function SalesHistory() {
     const [selectedInvoice, setSelectedInvoice] = useState(null)
     const [showPrintPreview, setShowPrintPreview] = useState(false)
 
+    const [dateRange, setDateRange] = useState({
+        start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
+        end: new Date().toISOString().split('T')[0]
+    })
+
     useEffect(() => {
         fetchLocations()
-        fetchTransactions()
     }, [])
+
+    useEffect(() => {
+        fetchTransactions()
+    }, [dateRange])
 
     useEffect(() => {
         processInvoices()
@@ -33,7 +41,20 @@ export default function SalesHistory() {
 
     const fetchTransactions = async () => {
         setLoading(true)
-        // Fetch last 500 sales
+
+        // Timezone Fix: Convert Local YYYY-MM-DD to UTC Range
+        const getUTCTime = (dateStr, isEnd = false) => {
+            if (!dateStr) return null
+            const [y, m, d] = dateStr.split('-').map(Number)
+            const date = new Date(y, m - 1, d)
+            if (isEnd) date.setHours(23, 59, 59, 999)
+            else date.setHours(0, 0, 0, 0)
+            return date.toISOString()
+        }
+
+        const startIso = getUTCTime(dateRange.start)
+        const endIso = getUTCTime(dateRange.end, true)
+
         const { data, error } = await supabase
             .from('transactions')
             .select(`
@@ -42,13 +63,51 @@ export default function SalesHistory() {
                 locations:from_location_id (name)
             `)
             .eq('type', 'SALE')
+            .gte('created_at', startIso)
+            .lte('created_at', endIso)
             .order('created_at', { ascending: false })
-            .limit(500)
+            .limit(1000)
 
         if (data) {
             setTransactions(data)
         }
         setLoading(false)
+    }
+
+    const setQuickDate = (type) => {
+        const today = new Date()
+        let start, end = new Date()
+
+        switch (type) {
+            case 'TODAY':
+                start = today;
+                break;
+            case 'YESTERDAY':
+                start = new Date(today);
+                start.setDate(start.getDate() - 1);
+                end = new Date(start);
+                break;
+            case 'MONTH':
+                start = new Date(today.getFullYear(), today.getMonth(), 1);
+                break;
+            case 'LAST_MONTH':
+                start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                end = new Date(today.getFullYear(), today.getMonth(), 0);
+                break;
+            default: return;
+        }
+
+        // Adjust timezone offset locally to avoid date shift on split -> simple hack for YYYY-MM-DD
+        const toLocalISODate = (d) => {
+            const z = d.getTimezoneOffset() * 60 * 1000
+            const local = new Date(d - z) || d
+            return local.toISOString().split('T')[0]
+        }
+
+        setDateRange({
+            start: toLocalISODate(start),
+            end: toLocalISODate(end)
+        })
     }
 
     const processInvoices = () => {
@@ -144,6 +203,39 @@ export default function SalesHistory() {
                 </div>
             </div>
 
+
+            {/* Date Filters */}
+            <div className="flex flex-wrap items-center gap-4 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                <div className="flex items-center gap-2 text-sm text-slate-600 font-medium">
+                    <Calendar size={16} />
+                    <span>Period:</span>
+                </div>
+
+                <div className="flex gap-2">
+                    <button onClick={() => setQuickDate('TODAY')} className="px-3 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded hover:bg-slate-100 hover:text-brand transition-colors">Today</button>
+                    <button onClick={() => setQuickDate('YESTERDAY')} className="px-3 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded hover:bg-slate-100 hover:text-brand transition-colors">Yesterday</button>
+                    <button onClick={() => setQuickDate('MONTH')} className="px-3 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded hover:bg-slate-100 hover:text-brand transition-colors">This Month</button>
+                    <button onClick={() => setQuickDate('LAST_MONTH')} className="px-3 py-1.5 text-xs font-bold bg-white border border-slate-300 rounded hover:bg-slate-100 hover:text-brand transition-colors">Last Month</button>
+                </div>
+
+                <div className="w-px h-6 bg-slate-300 mx-2 hidden md:block"></div>
+
+                <div className="flex items-center gap-2">
+                    <input
+                        type="date"
+                        value={dateRange.start}
+                        onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                        className="bg-white border rounded px-2 py-1.5 text-xs outline-none focus:border-brand"
+                    />
+                    <span className="text-slate-400 text-xs">to</span>
+                    <input
+                        type="date"
+                        value={dateRange.end}
+                        onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                        className="bg-white border rounded px-2 py-1.5 text-xs outline-none focus:border-brand"
+                    />
+                </div>
+            </div>
             <div className="bg-white rounded-lg shadow overflow-hidden">
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -202,22 +294,24 @@ export default function SalesHistory() {
             </div>
 
             {/* Hidden Printable Invoice */}
-            {selectedInvoice && (
-                <InvoiceDisplay
-                    cart={selectedInvoice.items}
-                    subtotal={selectedInvoice.totalAmount} // Simplified for history (assuming no separate subtotal/discount stored)
-                    discount={{ type: 'FIXED', value: 0, amount: 0 }} // Legacy/Simplification: We didn't store discount in transactions? 
-                    // Ah, slight issue: Transactions store 'sale_price' which is effective price. 
-                    // So 'totalAmount' IS the final total.
-                    // Subtotal vs Total reconstruction is tricky if we don't store them.
-                    // For now, let's treat Subtotal = Total and Discount = 0 for reprinted bills unless we add columns.
-                    total={selectedInvoice.totalAmount}
-                    user={{}} // Not really needed for reprint
-                    profile={{ role: 'Reprint' }}
-                    locationName={selectedInvoice.location_name}
-                    customerDetails={{ name: selectedInvoice.customer_name, phone: selectedInvoice.customer_phone }}
-                />
-            )}
-        </div>
+            {
+                selectedInvoice && (
+                    <InvoiceDisplay
+                        cart={selectedInvoice.items}
+                        subtotal={selectedInvoice.totalAmount} // Simplified for history (assuming no separate subtotal/discount stored)
+                        discount={{ type: 'FIXED', value: 0, amount: 0 }} // Legacy/Simplification: We didn't store discount in transactions? 
+                        // Ah, slight issue: Transactions store 'sale_price' which is effective price. 
+                        // So 'totalAmount' IS the final total.
+                        // Subtotal vs Total reconstruction is tricky if we don't store them.
+                        // For now, let's treat Subtotal = Total and Discount = 0 for reprinted bills unless we add columns.
+                        total={selectedInvoice.totalAmount}
+                        user={{}} // Not really needed for reprint
+                        profile={{ role: 'Reprint' }}
+                        locationName={selectedInvoice.location_name}
+                        customerDetails={{ name: selectedInvoice.customer_name, phone: selectedInvoice.customer_phone }}
+                    />
+                )
+            }
+        </div >
     )
 }
